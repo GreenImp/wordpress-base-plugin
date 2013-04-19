@@ -12,10 +12,10 @@ if(!class_exists('PluginHandler')){
 	include_once(dirname(__FILE__) . '/Page.class.php');
 
 	class PluginHandler{
-		public $version = 0.1;			// version number
-		public $name = 'My Plugin';		// plugin name
-		public $varName = 'myPlugin';	// variable name
-		public $dbPrefix = 'myplugin_';	// db prefix
+		public $version = 0.1;		// version number
+		public $name = '';			// plugin name
+		public $varName = '';		// variable name
+		public $dbPrefix = '';		// db prefix
 
 		public $debug = false;		// bool - whether we're debugging or not
 		public $directory = '';		// the plugin directory
@@ -27,6 +27,15 @@ if(!class_exists('PluginHandler')){
 		public function __construct($name, $varName = null, $dbPrefix = null, $debug = false){
 			// define whether we are in debug mode or not
 			$this->debug = ($debug === true);
+
+			if(($name == '') || ($name == 'Plugin Name')){
+				// no plugin name or default name specified
+				die('Please edit the PluginHandler call to define a unique plugin name');
+			}elseif($varName == 'pluginVariableName'){
+				// default variable name
+				die('Please edit the PluginHandler call to define a unique plugin variable name');
+			}
+
 
 			// define the plugin specific settings
 			$this->name = $name;
