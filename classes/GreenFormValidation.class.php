@@ -9,19 +9,21 @@
 if(function_exists('get_instance') && is_a(get_instance(), 'CI_Controller')){
 	// we are using codeigniter - wtf are you using this form validation class for if you have CI?!!
 	$message = '';
-	$message .= '<p>The FormValidation class is meant to mimic the CI form validation for non-codeigniter projects (such as WordPress) and is <strong>not meant to be used within codeigniter projects</strong>, as it provides far <strong>less</strong> functionality than codeigniter\'s own form validation.</p>';
+	$message .= '<p>The GreenFormValidation class is meant to mimic the CI form validation for non-codeigniter projects (such as WordPress) and is <strong>not meant to be used within codeigniter projects</strong>, as it provides far <strong>less</strong> functionality than codeigniter\'s own form validation.</p>';
 	$message .= '<p>Please use codeigniter\'s form validation, instead of this custom validation class.</p>';
 	$message .= '<p>File: ' . __FILE__ . '</p>';
 	die($message);
 }
 
-if(!class_exists('FormValidation')){
-	class FormValidation{
+if(!class_exists('GreenFormValidation')){
+	class GreenFormValidation{
 		private static $instance = null;
 		private static $db = null;
 
 		private static $errors = array();
 		private static $ruleSet = array();
+
+		private static $fetchedInput = array();
 
 		private static $errorMessages = array(
 			'required'				=> 'The %s field is required',
@@ -68,7 +70,7 @@ if(!class_exists('FormValidation')){
 
 		private function &getDB(){
 			if(is_null(self::$db)){
-				self::$db = new FormValidationDB();
+				self::$db = new GreenFormValidationDB();
 			}
 
 			return self::$db;
@@ -76,7 +78,7 @@ if(!class_exists('FormValidation')){
 
 		public static function getInstance(){
 			if(is_null(self::$instance)){
-				self::$instance = new FormValidation();
+				self::$instance = new GreenFormValidation();
 			}
 
 			return self::$instance;
@@ -122,11 +124,39 @@ if(!class_exists('FormValidation')){
 			self::$errors = array();
 
 			if(isset($_POST) && is_array($_POST) && !empty(self::$ruleSet)){
+				$variables = array();
+
 				foreach(self::$ruleSet as $rule){
 					if(is_array($rule) && isset($rule['rules']) && ($rule['rules'] != '')){
 						// field has rules - check them
 						$fieldRules = array_filter(array_unique(explode('|', $rule['rules'])));
-						if(!isset($_POST[$rule['field']]) || ($_POST[$rule['field']] == '')){
+
+						if(false !== ($field = self::getNameArray($rule['field']))){
+							// the field name is an array
+							if(
+								(!isset($_POST[$field[1]]) || !is_array($_POST[$field[1]])) ||											// field not defined or is not an array
+								(count($_POST[$field[1]]) == 0)	||																		// field is an empty array
+								(($field[2] != '') && (!isset($_POST[$field[1]][$field[2]]) || ($_POST[$field[1]][$field[2]] == '')))	// a key is defined, but not found (or is empty)
+							){
+								// field not posted - check if it is required
+								if(in_array('required', $fieldRules)){
+									// field is required
+									self::setError('required', $rule['label']);
+								}
+
+								// skip to the next field
+								continue;
+							}else{
+								// post variable exists
+								if($field[2] != ''){
+									// specific key defined
+									$variables[$rule['field']][] =& $_POST[$field[1]][$field[2]];
+								}else{
+									// no key defined - get them all
+									$variables[$rule['field']] =& $_POST[$field[1]];
+								}
+							}
+						}elseif(!isset($_POST[$rule['field']]) || ($_POST[$rule['field']] == '')){
 							// field not posted - check if it is required
 							if(in_array('required', $fieldRules)){
 								// field is required
@@ -135,45 +165,61 @@ if(!class_exists('FormValidation')){
 
 							// skip to the next field
 							continue;
+						}else{
+							// just a normal post variable, that exists
+							$variables[$rule['field']][] =& $_POST[$rule['field']];
 						}
 
-						// get the current field value
-						$val =& $_POST[$rule['field']];
+						foreach($variables[$rule['field']] as $var){
+							// get the current field value
+							$val =& $var;
 
-						foreach($fieldRules as $fieldRule){
-							$ruleParams = array();
-							if(preg_match('/(.*?)\[(.*)\]/', $fieldRule, $matches)){
-								$fieldRule = $matches[1];
-								$ruleParams = explode(',', $matches[2]);
-							}
-							array_unshift($ruleParams, $val);
-
-							$result = true;
-							if(0 === strpos($fieldRule, 'callback_')){
-								// user defined callback function
-								$fieldRule = substr($fieldRule, 9);
-								if(function_exists($fieldRule)){
-									// the user defined callback exists
-									$result = call_user_func_array($fieldRule, $ruleParams);
+							if($val == ''){
+								// value is empty - check if it is required
+								if(in_array('required', $fieldRules)){
+									// field is required
+									self::setError('required', $rule['label']);
 								}
-							}elseif(method_exists('FormValidation', $fieldRule)){
-								// a local function exists - use it
-								$result = call_user_func_array(array('FormValidation', $fieldRule), $ruleParams);
-							}elseif(function_exists($fieldRule)){
-								// a PHP function exists - use it
-								$result = call_user_func_array($fieldRule, $ruleParams);
-							}else{
-								// no function exists
+
+								// skip to the next value
 								continue;
 							}
 
-							// set the value
-							$val = is_bool($result) ? $val : $result;
+							foreach($fieldRules as $fieldRule){
+								$ruleParams = array();
+								if(preg_match('/(.*?)\[(.*)\]/', $fieldRule, $matches)){
+									$fieldRule = $matches[1];
+									$ruleParams = explode(',', $matches[2]);
+								}
+								array_unshift($ruleParams, $val);
 
-							// check the result
-							if($result === false){
-								// result was a failure - get the error message
-								self::setError($fieldRule, $rule['label'], isset($ruleParams[1]) ? $ruleParams[1] : '');
+								$result = true;
+								if(0 === strpos($fieldRule, 'callback_')){
+									// user defined callback function
+									$fieldRule = substr($fieldRule, 9);
+									if(function_exists($fieldRule)){
+										// the user defined callback exists
+										$result = call_user_func_array($fieldRule, $ruleParams);
+									}
+								}elseif(method_exists('GreenFormValidation', $fieldRule)){
+									// a local function exists - use it
+									$result = call_user_func_array(array('GreenFormValidation', $fieldRule), $ruleParams);
+								}elseif(function_exists($fieldRule)){
+									// a PHP function exists - use it
+									$result = call_user_func_array($fieldRule, $ruleParams);
+								}else{
+									// no function exists
+									continue;
+								}
+
+								// set the value
+								$val = is_bool($result) ? $val : $result;
+
+								// check the result
+								if($result === false){
+									// result was a failure - get the error message
+									self::setError($fieldRule, $rule['label'], isset($ruleParams[1]) ? $ruleParams[1] : '');
+								}
 							}
 						}
 					}
@@ -739,10 +785,103 @@ if(!class_exists('FormValidation')){
 
 			return !!preg_match('/^' . $format . '$/', $str);
 		}
+
+
+		/**
+		 * Checks whether the given name is an array reference.
+		 * If true, then an array is returned in the following format:
+		 * array(
+		 * 	0	=> name[key],
+		 *  1	=> name
+		 *  2	=> key
+		 * )
+		 *
+		 * @param $name
+		 * @return array|bool
+		 */
+		private static function getNameArray($name){
+			if(preg_match('/^(.+?)\[([^\]]*)\]$/', $name, $matches)){
+				return $matches;
+			}
+			return false;
+		}
+
+		/**
+		 * Takes a name and returns the referenced post variable.
+		 * This can handle names referencing post arrays.
+		 *
+		 * @param $name
+		 * @return array|string
+		 */
+		private function getInput($name){
+			$return = '';
+
+			if(false !== ($matches = self::getNameArray($name))){
+				// name is an array
+				if(isset($_POST[$matches[1]]) && is_array($_POST[$matches[1]])){
+					// cache the form input
+					self::$fetchedInput[$matches[1]] = isset(self::$fetchedInput[$matches[1]]) ? self::$fetchedInput[$matches[1]] : $_POST[$matches[1]];
+
+					if($matches[2] != ''){
+						// array key defined
+						$return = isset(self::$fetchedInput[$matches[1]][$matches[2]]) ? self::$fetchedInput[$matches[1]][$matches[2]] : '';
+					}else{
+						// no key defined return the first element
+						$return = (count(self::$fetchedInput[$matches[1]]) > 0) ? array_shift(self::$fetchedInput[$matches[1]]) : '';
+					}
+				}
+			}else{
+				// name is not an array
+				$return = isset($_POST[$name]) ? $_POST[$name] : '';
+			}
+
+			return $this->prep_for_form($return);
+		}
+
+		/**
+		 * Returns the value for the post variable, with the given name.
+		 * If value isn't found, and empty string is returned.
+		 * Returned value is escaped for form input.
+		 *
+		 * @param $name
+		 * @return array|string
+		 */
+		public function getValue($name){
+			return $this->getInput($name);
+		}
+
+		/**
+		 * Returns the 'selected' value of the given post variable.
+		 * If selected, a value of 'selected' is returned, otherwise
+		 * and empty string.
+		 *
+		 * @param $name
+		 * @param $val
+		 * @return string
+		 */
+		public function getSelect($name, $val){
+			$input = $this->getInput($name);
+			return ($input == $val) ? 'selected' : '';
+		}
+
+
+		/**
+		 * Returns the 'checked' value of the given post variable.
+		 * If checked, a value of 'checked' is returned, otherwise
+		 * and empty string.
+		 *
+		 * @param $name
+		 * @param $val
+		 * @return string
+		 */
+		public function getCheckbox($name, $val){
+			$input = $this->getInput($name);
+			return ($input == $val) ? 'checked' : '';
+		}
 	}
 
 
-	class FormValidationDB{
+	class GreenFormValidationDB{
 		private $db = null;
 		private $functions = array();
 

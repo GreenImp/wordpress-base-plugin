@@ -3,8 +3,8 @@
  * Author: GreenImp
  * Date Created: 05/09/2012 12:38
  */
-if(!class_exists('Message')){
-	class Message{
+if(!class_exists('GreenMessage')){
+	class GreenMessage{
 		private static $sessionName = 'message_class_messages';
 
 		public function __construct(){
@@ -16,19 +16,32 @@ if(!class_exists('Message')){
 				session_start();
 			}
 
-			add_action('admin_notices', 'Message::show');
+			add_action('admin_notices', array(__CLASS__, 'show'));
 		}
 
+		/**
+		 * Adds a message
+		 *
+		 * @param $type
+		 * @param $message
+		 */
 		public static function add($type, $message){
 			$_SESSION[self::$sessionName][$type][] = $message;
 
 			array_unique($_SESSION[self::$sessionName][$type]);
 		}
 
+		/**
+		 * Outputs or returns a list of message
+		 *
+		 * @param bool $return
+		 * @param bool $keep
+		 * @return string
+		 */
 		public static function show($return = false, $keep = false){
 			$output = '';
 
-			if(isset($_SESSION[self::$sessionName]) && is_array($_SESSION[self::$sessionName]) && (count($_SESSION[self::$sessionName]) > 0)){
+			if(self::check()){
 				// messages found - loop through each message type and output them
 				foreach($_SESSION[self::$sessionName] as $type => $messages){
 					if(is_array($messages)){
@@ -48,6 +61,16 @@ if(!class_exists('Message')){
 			}else{
 				echo $output;
 			}
+		}
+
+		/**
+		 * Checks if any messages are defined.
+		 * Returns true or false.
+		 *
+		 * @return bool
+		 */
+		public static function check(){
+			return isset($_SESSION[self::$sessionName]) && is_array($_SESSION[self::$sessionName]) && (count($_SESSION[self::$sessionName]) > 0);
 		}
 	}
 }

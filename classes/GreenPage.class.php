@@ -5,8 +5,8 @@
  * Author: GreenImp Web
  * Date Created: 26/03/13 21:49
  */
-if(!class_exists('Page')){
-	class Page{
+if(!class_exists('GreenPage')){
+	class GreenPage{
 		private $rewriteRules = array();
 		private $directory = '';
 		private $varName = '';
@@ -145,7 +145,7 @@ if(!class_exists('Page')){
 				$urlPath = rtrim($urlPath, '|');
 				
 				$new_rule = array(
-					$this->varName . '/(' . $urlPath . ')(/.*)?)$' => 'index.php?' . $this->varName . '=$matches[1]'
+					$this->varName . '/((' . $urlPath . ')(/.*)?)$' => 'index.php?' . $this->varName . '=$matches[1]'
 				);
 				$wp_rewrite->rules = $new_rule + (($wp_rewrite->rules === null) ? array() : $wp_rewrite->rules);
 			}
